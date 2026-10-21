@@ -1,0 +1,30 @@
+{
+  "generated": "2026-10-21T15:44:12",
+  "count": 3,
+  "items": [
+    {
+      "path": "words/C#单词.txt",
+      "name": "C#单词.txt",
+      "base": "C#单词",
+      "ext": "txt",
+      "size": 970,
+      "count": 30
+    },
+    {
+      "path": "words/Unity单词.txt",
+      "name": "Unity单词.txt",
+      "base": "Unity单词",
+      "ext": "txt",
+      "size": 970,
+      "count": 30
+    },
+    {
+      "path": "words/常用单词.txt",
+      "name": "常用单词.txt",
+      "base": "常用单词",
+      "ext": "txt",
+      "size": 914,
+      "count": 30
+    }
+  ]
+}

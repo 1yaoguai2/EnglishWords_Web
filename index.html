@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>单词背诵</title>
+
+<!-- 主题必须在首次绘制前确定，否则浅色用户会看到一帧黑底。必须内联、必须早于 CSS -->
+<script>
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem('word:theme'); } catch (e) {}
+    if (t !== 'dark' && t !== 'light') {
+      t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+    }
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='24'>&#128214;</text></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="icon-btn" id="btnBack" title="返回词库（Esc）" hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M15 18l-6-6 6-6"/>
+    </svg>
+  </button>
+
+  <div class="brand">
+    <div class="brand-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        <path d="M9 7h7M9 11h5"/>
+      </svg>
+    </div>
+    <div class="brand-text">
+      <h1>单词背诵</h1>
+      <span id="brandSub">自动扫描 words 文件夹</span>
+    </div>
+  </div>
+
+  <div class="topbar-actions">
+    <button class="txt-btn" id="btnImport" title="从本地文件夹导入 txt 词库">导入词库</button>
+    <button class="icon-btn" id="btnRescan" title="重新扫描 words 文件夹">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+        <path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10"/><path d="M1 14l4.6 4.4A9 9 0 0 0 20.5 15"/>
+      </svg>
+    </button>
+    <button class="icon-btn" id="btnSound" title="键盘音效" aria-pressed="true">
+      <svg class="ico-sound-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+        <path d="M15.5 8.5a5 5 0 0 1 0 7"/>
+        <path d="M18.5 5.5a9 9 0 0 1 0 13"/>
+      </svg>
+      <svg class="ico-sound-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+        <path d="M22 9l-6 6M16 9l6 6"/>
+      </svg>
+    </button>
+    <button class="icon-btn" id="btnTheme" title="切换白天 / 夜间主题">
+      <svg class="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+      </svg>
+      <svg class="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="4.2"/><path d="M12 1.5v2.5M12 20v2.5M4.2 4.2l1.8 1.8M18 18l1.8 1.8M1.5 12H4M20 12h2.5M4.2 19.8L6 18M18 6l1.8-1.8"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<input type="file" id="folderInput" webkitdirectory directory multiple accept=".txt,text/plain" hidden>
+
+<main class="main" id="main">
+
+  <!-- ======================= 词库列表 ======================= -->
+  <section class="view" id="view-books">
+    <div class="hero">
+      <h2>选择词库</h2>
+      <p id="booksMeta">正在扫描 words 文件夹…</p>
+    </div>
+
+    <label class="search-box" id="searchRow">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input type="search" id="searchInput" placeholder="搜索词库…" autocomplete="off">
+    </label>
+
+    <div class="books" id="bookList"></div>
+
+    <div class="empty card" id="booksEmpty" hidden>
+      <h3 id="emptyTitle">没有找到词库</h3>
+      <p id="emptyText"></p>
+      <button class="btn primary" id="emptyPick">选择 txt 文件夹…</button>
+    </div>
+
+    <p class="format-tip">
+      词库格式：每个 <code>.txt</code> 文件一行一个单词，写作 <code>单词 音标 翻译</code>，用空格或 Tab 分隔。
+      例：<code>apple /ˈæpl/ 苹果</code>
+    </p>
+  </section>
+
+  <!-- ======================= 打字背诵 ======================= -->
+  <section class="view" id="view-spell" hidden>
+    <div class="mode-head">
+      <h2>打字背诵</h2>
+      <p id="spellSub"></p>
+    </div>
+
+    <div class="card panel" id="spellSetup">
+      <div class="field">
+        <span class="label">出现顺序</span>
+        <div class="seg" id="spellOrder">
+          <button type="button" data-val="seq" class="on">顺序</button>
+          <button type="button" data-val="rand">乱序</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">本轮数量</span>
+        <div class="seg" id="spellLimit">
+          <button type="button" data-val="0" class="on">全部</button>
+          <button type="button" data-val="10">10 个</button>
+          <button type="button" data-val="20">20 个</button>
+          <button type="button" data-val="30">30 个</button>
+        </div>
+      </div>
+      <p class="hint">先看音标试着拼写，回车判分。想不起来可按空格看翻译，再按一次空格显示完整单词（该词记为未通过），改对后才进入下一个。</p>
+      <button class="btn primary big" id="spellStart">开始背诵</button>
+    </div>
+
+    <div id="spellPlay" hidden>
+      <div class="card quiz">
+        <div class="quiz-top">
+          <span id="spellCounter">1 / 20</span>
+          <div class="progress"><i id="spellProgress"></i></div>
+          <span class="quiz-err" id="spellErrCount">错 0</span>
+          <span class="quiz-reveal" id="spellRevealCount" hidden>看答案 0</span>
+        </div>
+        <div class="quiz-phonetic" id="spellPhonetic">/ˈæpl/</div>
+        <div class="quiz-mask" id="spellMask">_ _ _ _ _</div>
+        <div class="quiz-trans" id="spellTrans" hidden></div>
+        <input id="spellInput" class="quiz-input" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="输入单词后回车">
+        <p class="quiz-msg" id="spellMsg">按回车提交答案</p>
+        <div class="quiz-foot">
+          <span><kbd>Enter</kbd> 提交 / 继续</span>
+          <span><kbd>Space</kbd> 看翻译 / 再按看答案</span>
+          <span><kbd>Esc</kbd> 返回词库</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="spellResult" hidden></div>
+  </section>
+
+  <!-- ======================= 对象连接 ======================= -->
+  <section class="view" id="view-match" hidden>
+    <div class="mode-head">
+      <h2>对象连接</h2>
+      <p id="matchSub"></p>
+    </div>
+
+    <div class="card panel" id="matchSetup">
+      <div class="field">
+        <span class="label">每轮单词数</span>
+        <div class="seg" id="matchSize">
+          <button type="button" data-val="4">4 个</button>
+          <button type="button" data-val="5" class="on">5 个</button>
+          <button type="button" data-val="6">6 个</button>
+          <button type="button" data-val="8">8 个</button>
+        </div>
+      </div>
+      <p class="hint">三块一组：把同一个词的「单词 / 音标 / 翻译」依次点中，选满 3 块自动成组（同色 + 编号）。点已组成的方块可拆开重选，全部组好后点「确定」查看对错。</p>
+      <button class="btn primary big" id="matchStart">开始连接</button>
+    </div>
+
+    <div id="matchPlay" hidden>
+      <div class="match-bar">
+        <span class="match-tip" id="matchTip">点击第一个方块开始绑定</span>
+        <div class="match-actions">
+          <button class="btn small" id="matchUndo">撤销</button>
+          <button class="btn small" id="matchReset">重置</button>
+          <button class="btn small primary" id="matchCheck">确定</button>
+        </div>
+      </div>
+      <div class="card group-tray" id="matchTray"></div>
+      <div class="match-board" id="matchBoard"></div>
+    </div>
+
+    <div id="matchResult" hidden></div>
+  </section>
+
+  <!-- ======================= 单词打字 ======================= -->
+  <section class="view" id="view-type" hidden>
+    <div class="mode-head">
+      <h2>单词打字</h2>
+      <p id="typeSub"></p>
+    </div>
+
+    <div class="card panel" id="typeSetup">
+      <div class="field">
+        <span class="label">本轮数量</span>
+        <div class="seg" id="typeLimit">
+          <button type="button" data-val="10">10 个</button>
+          <button type="button" data-val="20" class="on">20 个</button>
+          <button type="button" data-val="30">30 个</button>
+          <button type="button" data-val="0">全部</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">出现顺序</span>
+        <div class="seg" id="typeOrder">
+          <button type="button" data-val="seq" class="on">顺序</button>
+          <button type="button" data-val="rand">乱序</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">大小写</span>
+        <div class="seg" id="typeCase">
+          <button type="button" data-val="loose" class="on">忽略大小写</button>
+          <button type="button" data-val="strict">区分大小写</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">字体大小</span>
+        <div class="seg" id="typeFont">
+          <button type="button" data-val="18">小</button>
+          <button type="button" data-val="22" class="on">标准</button>
+          <button type="button" data-val="28">大</button>
+          <button type="button" data-val="34">特大</button>
+        </div>
+        <span class="field-note" id="typeFontNote">22px</span>
+      </div>
+      <p class="hint">按顺序打出屏幕上的所有单词，打错会标黄并记一次错误，打完一个单词按空格继续，全部打完给出用时与错误次数。</p>
+      <button class="btn primary big" id="typeStart">开始打字</button>
+    </div>
+
+    <div id="typePlay" hidden>
+      <div class="type-hud">
+        <div class="hud-item"><span>用时</span><b id="typeTime">0.0s</b></div>
+        <div class="hud-item"><span>错误</span><b id="typeErr" class="bad">0</b></div>
+        <div class="hud-item"><span>进度</span><b id="typeProgress">0 / 0</b></div>
+        <div class="hud-item"><span>正确率</span><b id="typeAcc">100%</b></div>
+        <div class="hud-item hud-font">
+          <span>字号</span>
+          <div class="font-ctrl">
+            <button type="button" id="typeFontDown" title="缩小字号">A−</button>
+            <b id="typeFontVal">22px</b>
+            <button type="button" id="typeFontUp" title="放大字号">A+</button>
+          </div>
+        </div>
+      </div>
+      <div class="card type-stage" id="typeStage">
+        <div class="type-text" id="typeText"></div>
+      </div>
+      <p class="type-hint" id="typeHintLine">开始输入即计时 · 打完一个单词按空格继续 · Esc 返回</p>
+    </div>
+
+    <div id="typeResult" hidden></div>
+  </section>
+
+</main>
+
+<footer class="statusbar">
+  <span class="dot" id="statusDot"></span>
+  <span id="statusText">初始化中…</span>
+  <span class="status-right" id="statusRight"></span>
+</footer>
+
+<script src="js/core.js"></script>
+<script src="js/parser.js"></script>
+<script src="js/sound.js"></script>
+<script src="js/app.js"></script>
+<script src="js/mode-spell.js"></script>
+<script src="js/mode-match.js"></script>
+<script src="js/mode-type.js"></script>
+</body>
+</html>
