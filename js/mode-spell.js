@@ -256,6 +256,8 @@
   function finish() {
     S.playing = false;
     S.phase = 'done';
+    // 输入框失焦，避免结算后按键仍落进隐藏的输入框
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
 
     const total = S.list.length;
     const acc = total ? Math.round(S.firstTry / total * 100) : 0;
@@ -299,10 +301,15 @@
         '<h3 class="result-title">错误单词（' + wrong.length + '）</h3>' +
         wrongHtml +
         '<div class="result-actions">' +
-          '<button type="button" class="btn primary" data-act="again">再练一遍</button>' +
-          '<button type="button" class="btn" data-act="wrong"' + (wrong.length ? '' : ' disabled') + '>只练错词</button>' +
-          '<button type="button" class="btn ghost" data-act="home">返回词库</button>' +
+          '<button type="button" class="btn primary" data-act="again" data-keys="1,r">再练一遍 <kbd class="btn-key">1</kbd></button>' +
+          '<button type="button" class="btn" data-act="wrong" data-keys="2,w"' + (wrong.length ? '' : ' disabled') + '>只练错词 <kbd class="btn-key">2</kbd></button>' +
+          '<button type="button" class="btn ghost" data-act="home" data-keys="3,q">返回词库 <kbd class="btn-key">3</kbd></button>' +
         '</div>' +
+        '<p class="result-keys">不用鼠标直接按键盘：' +
+          '<kbd>Enter</kbd> 或 <kbd>R</kbd> 再练一遍 · ' +
+          '<kbd>W</kbd> 只练错词 · ' +
+          '<kbd>Esc</kbd> 返回词库（也可以用 <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd>）' +
+        '</p>' +
       '</div>';
   }
 

@@ -137,7 +137,8 @@ async function shot(page, name) {
     spellResult.tags + ' 个标记：' + spellResult.wrongWords.join('、'));
   await shot(page, 'spell-result');
 
-  await page.click('#spellResult button[data-act="home"]');
+  await page.keyboard.press('3');
+  check('背诵结算按 3 返回词库', await page.evaluate(() => !document.querySelector('#view-books').hidden));
 
   // ---------- 3. 对象连接 ----------
   await page.locator('.book').first().locator('button[data-mode="match"]').click();
@@ -224,7 +225,8 @@ async function shot(page, name) {
   check('正确编组标记为对', matchResult.okBlocks === (nEntries - 2) * 3, '标绿 ' + matchResult.okBlocks + ' 块');
   await shot(page, 'match-result');
 
-  await page.click('#matchResult button[data-act="home"]');
+  await page.keyboard.press('q');
+  check('连接结算按 Q 返回词库', await page.evaluate(() => !document.querySelector('#view-books').hidden));
 
   // ---------- 4. 单词打字 ----------
   await page.locator('.book').first().locator('button[data-mode="type"]').click();
@@ -264,27 +266,52 @@ async function shot(page, name) {
   check('键盘音效已启用', soundState.hasSfx && soundState.enabled, JSON.stringify(soundState));
   check('按键触发音频上下文', soundState.ctx, 'AudioContext 已创建');
 
+  await page.waitForTimeout(500);
+  const sampleState = await page.evaluate(() => {
+    const b = window.SFX && window.SFX.buffers ? window.SFX.buffers : {};
+    return {
+      key: !!b.key,
+      error: !!b.error,
+      del: !!b.del,
+      keyDur: b.key ? b.key.duration : 0,
+      delDur: b.del ? b.del.duration : 0
+    };
+  });
+  check('输入/错误/删除采样已加载', sampleState.key && sampleState.error && sampleState.del,
+    'key ' + sampleState.keyDur.toFixed(2) + 's / error 已解码 / del ' + sampleState.delDur.toFixed(2) + 's');
+  check('输入音效已裁掉头尾（时长变短）', sampleState.keyDur < 0.3 && sampleState.keyDur > 0.02,
+    '裁剪后 ' + sampleState.keyDur.toFixed(3) + 's');
+
   await page.keyboard.type(words[0]);
   await page.waitForTimeout(150);
 
   const afterWord = await page.evaluate(() => {
-    const bad = document.querySelector('#typeText .tw.complete .tc.bad');
-    const s = bad ? getComputedStyle(bad) : null;
+    const fixed = document.querySelector('#typeText .tw.complete .tc.ok.was-bad');
+    const good = document.querySelector('#typeText .tw.complete .tc.ok:not(.was-bad)');
+    const sf = fixed ? getComputedStyle(fixed) : null;
+    const sg = good ? getComputedStyle(good) : null;
     return {
       complete: document.querySelectorAll('#typeText .tw.complete').length,
       done: document.querySelectorAll('#typeText .tw.done').length,
-      redChars: document.querySelectorAll('#typeText .tw.complete .tc.bad').length,
-      bg: s ? s.backgroundColor : '',
-      color: s ? s.color : '',
+      fixedChars: document.querySelectorAll('#typeText .tw.complete .tc.ok.was-bad').length,
+      badChars: document.querySelectorAll('#typeText .tw.complete .tc.bad').length,
+      fixedBg: sf ? sf.backgroundColor : '',
+      goodBg: sg ? sg.backgroundColor : '',
       progress: document.querySelector('#typeProgress').textContent
     };
   });
   check('打完单词后停在等待空格', afterWord.complete === 1 && afterWord.done === 0, afterWord.progress);
 
-  const rgb = (afterWord.bg.match(/[\d.]+/g) || []).map(Number);
-  check('拼错的字母用黄色背景标记（不是红字）',
-    afterWord.redChars >= 1 && rgb.length >= 3 && rgb[0] > 200 && rgb[1] > 150 && rgb[2] < 140,
-    afterWord.bg + ' / 文字颜色 ' + afterWord.color);
+  const fixRgb = (afterWord.fixedBg.match(/[\d.]+/g) || []).map(Number);
+  check('纠正后的字母显示琥珀色底（不是红字）',
+    afterWord.fixedChars >= 1 && afterWord.badChars === 0 &&
+    fixRgb.length >= 3 && fixRgb[0] > 200 && fixRgb[1] > 120 && fixRgb[2] < 150,
+    '琥珀块 ' + afterWord.fixedChars + ' 个 / ' + afterWord.fixedBg);
+
+  const goodRgb = (afterWord.goodBg.match(/[\d.]+/g) || []).map(Number);
+  check('打对的字母显示绿色底色块',
+    goodRgb.length >= 3 && goodRgb[0] < 120 && goodRgb[1] > 150,
+    afterWord.goodBg);
 
   // 打字过程中可调字号
   const sizeBefore = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('#typeText')).fontSize));
@@ -310,7 +337,45 @@ async function shot(page, name) {
   }));
   check('按空格进入下一个单词', advanced.done === 1, advanced.progress);
 
-  for (let i = 1; i < words.length; i++) {
+  // 第二个单词：打错 → 红色底；退格清除 → 改对 → 琥珀色底
+  const w1 = words[1];
+  const wrongChar = w1.charAt(1) === 'x' ? 'q' : 'x';
+  await page.keyboard.type(w1.charAt(0));            // 第一个字母打对（绿底）
+  await page.keyboard.type(wrongChar);               // 第二个字母打错（红底）
+  const badState = await page.evaluate(() => {
+    const n = document.querySelector('#typeText .tw.active .tc.bad');
+    const s = n ? getComputedStyle(n) : null;
+    return { has: !!n, bg: s ? s.backgroundColor : '', color: s ? s.color : '' };
+  });
+  const badRgb = (badState.bg.match(/[\d.]+/g) || []).map(Number);
+  check('打错的字母显示红色底色块',
+    badState.has && badRgb.length >= 3 && badRgb[0] > 200 && badRgb[1] < 160,
+    badState.bg + ' / 文字颜色 ' + badState.color);
+  await shot(page, 'type-bad-char');
+
+  await page.keyboard.press('Backspace');            // 退格：红色底被清除
+  const delState = await page.evaluate(() => ({
+    anyBad: !!document.querySelector('#typeText .tw.active .tc.bad'),
+    badLeft: document.querySelectorAll('#typeText .tc.bad').length
+  }));
+  check('退格清除红色错误标记', !delState.anyBad && delState.badLeft === 0, '剩余红色 ' + delState.badLeft);
+
+  await page.keyboard.type(w1.charAt(1));            // 改对 → 琥珀色底
+  const fixedState = await page.evaluate(() => {
+    const n = document.querySelector('#typeText .tw.active .tc.ok.was-bad');
+    const s = n ? getComputedStyle(n) : null;
+    return { has: !!n, bg: s ? s.backgroundColor : '' };
+  });
+  const fRgb = (fixedState.bg.match(/[\d.]+/g) || []).map(Number);
+  check('错误后删除改对显示琥珀色底',
+    fixedState.has && fRgb.length >= 3 && fRgb[0] > 200 && fRgb[1] > 120 && fRgb[2] < 150,
+    fixedState.bg);
+  await shot(page, 'type-fixed-char');
+
+  await page.keyboard.type(w1.slice(2));
+  await page.keyboard.press('Space');
+
+  for (let i = 2; i < words.length; i++) {
     await page.keyboard.type(words[i]);
     await page.keyboard.press('Space');
   }
@@ -322,8 +387,73 @@ async function shot(page, name) {
     time: document.querySelector('#typeTime').textContent
   }));
   check('打字结算显示用时', /\d/.test(typeResult.time), typeResult.time);
-  check('打字结算统计错误', typeResult.err.trim() === '2', '错误 ' + typeResult.err + ' 次');
+  check('打字结算统计错误', typeResult.err.trim() === '3', '错误 ' + typeResult.err + ' 次');
   await shot(page, 'type-result');
+
+  // ---------- 4b. 结算页纯键盘操作（不用鼠标） ----------
+  async function replayRound() {
+    await page.waitForSelector('#typePlay:not([hidden])');
+    const ws = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('#typeText .tw')).map(w => w.textContent));
+    for (let i = 0; i < ws.length; i++) {
+      await page.keyboard.type(ws[i]);
+      await page.keyboard.press('Space');
+    }
+    await page.waitForSelector('#typeResult:not([hidden])', { timeout: 10000 });
+  }
+
+  const keyUi = await page.evaluate(() => ({
+    tip: !!document.querySelector('#typeResult .result-keys'),
+    buttons: Array.from(document.querySelectorAll('#typeResult .result-actions button')).map(b => ({
+      act: b.dataset.act, keys: b.dataset.keys, kbd: !!b.querySelector('.btn-key')
+    }))
+  }));
+  check('结算页显示快捷键角标与提示',
+    keyUi.tip && keyUi.buttons.length === 3 && keyUi.buttons.every(b => b.keys && b.kbd),
+    JSON.stringify(keyUi.buttons));
+
+  await page.keyboard.press('Enter');
+  const afterEnter = await page.evaluate(() => ({
+    play: !document.querySelector('#typePlay').hidden,
+    resultHidden: document.querySelector('#typeResult').hidden,
+    prog: document.querySelector('#typeProgress').textContent
+  }));
+  check('按 Enter 再打一次', afterEnter.play && afterEnter.resultHidden, afterEnter.prog);
+
+  await replayRound();
+
+  await page.keyboard.press('s');
+  const afterS = await page.evaluate(() => ({
+    setup: !document.querySelector('#typeSetup').hidden,
+    resultHidden: document.querySelector('#typeResult').hidden
+  }));
+  check('按 S 调整设置', afterS.setup && afterS.resultHidden, JSON.stringify(afterS));
+
+  await page.keyboard.press('Enter');
+  check('设置页按 Enter 直接开始',
+    await page.evaluate(() => !document.querySelector('#typePlay').hidden));
+
+  await replayRound();
+
+  await page.keyboard.press('r');
+  check('按 R 再打一次（字母别名）', await page.evaluate(() =>
+    !document.querySelector('#typePlay').hidden && document.querySelector('#typeResult').hidden));
+
+  await replayRound();
+
+  await page.keyboard.press('3');
+  const after3 = await page.evaluate(() => ({
+    books: !document.querySelector('#view-books').hidden,
+    typeHidden: document.querySelector('#view-type').hidden
+  }));
+  check('按 3 返回词库', after3.books && after3.typeHidden, JSON.stringify(after3));
+
+  await page.locator('.book').first().locator('button[data-mode="type"]').click();
+  await page.click('#typeStart');
+  await replayRound();
+  await page.keyboard.press('Escape');
+  check('按 Esc 返回词库',
+    await page.evaluate(() => !document.querySelector('#view-books').hidden));
 
   // ---------- 5. 主题切换 ----------
   await page.click('#btnTheme');

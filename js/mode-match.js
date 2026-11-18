@@ -348,6 +348,8 @@
     }).join('');
 
     el.result.hidden = false;
+    // 清掉棋盘按钮的焦点，避免结算后按 Enter 误触发棋盘
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     el.result.innerHTML = '' +
       '<div class="card result">' +
         '<div class="result-head">' +
@@ -361,10 +363,15 @@
         '<h3 class="result-title">逐词结果</h3>' +
         '<ul class="check-list">' + rows + '</ul>' +
         '<div class="result-actions">' +
-          '<button type="button" class="btn primary" data-act="next">换一批</button>' +
-          '<button type="button" class="btn" data-act="retry">重做本轮</button>' +
-          '<button type="button" class="btn ghost" data-act="home">返回词库</button>' +
+          '<button type="button" class="btn primary" data-act="next" data-keys="1,n">换一批 <kbd class="btn-key">1</kbd></button>' +
+          '<button type="button" class="btn" data-act="retry" data-keys="2,r">重做本轮 <kbd class="btn-key">2</kbd></button>' +
+          '<button type="button" class="btn ghost" data-act="home" data-keys="3,q">返回词库 <kbd class="btn-key">3</kbd></button>' +
         '</div>' +
+        '<p class="result-keys">不用鼠标直接按键盘：' +
+          '<kbd>Enter</kbd> 或 <kbd>N</kbd> 换一批 · ' +
+          '<kbd>R</kbd> 重做本轮 · ' +
+          '<kbd>Esc</kbd> 返回词库（也可以用 <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd>）' +
+        '</p>' +
       '</div>';
 
     el.result.scrollIntoView({ behavior: 'smooth', block: 'start' });

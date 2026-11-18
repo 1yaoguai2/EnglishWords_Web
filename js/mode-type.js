@@ -2,7 +2,9 @@
    模式三：单词打字
    ------------------------------------------------------------
    全部单词按空格隔开铺在屏幕上，逐字输入。
-   打错标红、记错误次数；全部打完给出用时与错误统计。
+   字母状态：打对 = 绿色底；打错 = 红色底；
+   错过后（退格清除）再打对 = 琥珀色底，本轮保留。
+   全部打完给出用时与错误统计。
    ============================================================ */
 (function (window, document) {
   'use strict';
@@ -187,6 +189,16 @@
   /* ---------------- 键盘 ---------------- */
 
   function onKey(e) {
+    // 设置页：按 Enter 直接开始，不必回头找鼠标
+    if (!T.playing && el.setup && !el.setup.hidden &&
+        e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const ae = document.activeElement;
+      if (ae && ae.tagName === 'BUTTON' && ae.closest('#typeSetup')) return; // 交给按钮原生点击
+      e.preventDefault();
+      start();
+      return;
+    }
+
     if (!T.playing || T.done) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.isComposing || e.keyCode === 229) return;
@@ -240,7 +252,11 @@
       T.correct++;
       SFX.play('key');
       const node = charEl(T.wi, T.ci);
-      if (node) node.classList.add('ok');
+      // 打对：绿底；清除红色错误底；was-bad 保留 → 显示琥珀色
+      if (node) {
+        node.classList.remove('bad');
+        node.classList.add('ok');
+      }
       advance();
     } else {
       T.errors++;
@@ -261,8 +277,8 @@
 
   function flashError(msg) {
     if (T.curEl) {
-      // 只加黄色底色标记，不晃动界面；纠正后仍保留到本轮结束
-      T.curEl.classList.add('bad');
+      // 红色底色标记；同时记住这个位置错过，之后改对会显示琥珀色
+      T.curEl.classList.add('bad', 'was-bad');
     }
     setHint(msg, true);
   }
@@ -300,6 +316,16 @@
     const cur = wordEl(T.wi);
     if (cur) cur.classList.remove('complete');
 
+    // 当前位置就是刚打错的字母：只清除红色错误底，位置不动
+    const curNode = charEl(T.wi, T.ci);
+    if (curNode && curNode.classList.contains('bad')) {
+      curNode.classList.remove('bad');
+      setCursor();
+      updateHud();
+      setHint(progressHint());
+      return;
+    }
+
     if (T.ci > 0) {
       T.ci--;
     } else {
@@ -310,7 +336,13 @@
     }
 
     const node = charEl(T.wi, T.ci);
-    if (node) node.classList.remove('ok');   // 只取消"已输入"，黄色错误底保留
+    if (node) {
+      node.classList.remove('ok');           // 取消"已输入"
+      if (node.classList.contains('bad')) {
+        node.classList.remove('bad');        // 退格清除红色错误底
+        // was-bad 保留：之后改对会显示琥珀色
+      }
+    }
 
     setCursor();
     updateHud();
@@ -338,6 +370,8 @@
     T.done = true;
     T.playing = false;
     clearInterval(T.timer);
+    // 清掉焦点：避免结算后按 Enter / 空格误触发之前点过的字号按钮
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
 
     const secs = T.started ? (performance.now() - T.t0) / 1000 : 0;
     const acc = T.typed ? Math.round(T.correct / T.typed * 100) : 100;
@@ -357,10 +391,15 @@
         '</div>' +
         '<p class="result-note">共 ' + T.words.length + ' 个单词 / ' + T.totalChars + ' 个字符</p>' +
         '<div class="result-actions">' +
-          '<button type="button" class="btn primary" data-act="again">再打一次</button>' +
-          '<button type="button" class="btn" data-act="setup">调整设置</button>' +
-          '<button type="button" class="btn ghost" data-act="home">返回词库</button>' +
+          '<button type="button" class="btn primary" data-act="again" data-keys="1,r">再打一次 <kbd class="btn-key">1</kbd></button>' +
+          '<button type="button" class="btn" data-act="setup" data-keys="2,s">调整设置 <kbd class="btn-key">2</kbd></button>' +
+          '<button type="button" class="btn ghost" data-act="home" data-keys="3,q">返回词库 <kbd class="btn-key">3</kbd></button>' +
         '</div>' +
+        '<p class="result-keys">不用鼠标直接按键盘：' +
+          '<kbd>Enter</kbd> 或 <kbd>R</kbd> 再打一次 · ' +
+          '<kbd>S</kbd> 调整设置 · ' +
+          '<kbd>Esc</kbd> 返回词库（也可以用 <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd>）' +
+        '</p>' +
       '</div>';
 
     el.result.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -397,7 +436,9 @@
     },
     close: function () {
       T.playing = false;
+      T.done = false;
       clearInterval(T.timer);
+      if (el.result) el.result.hidden = true;
     }
   };
 })(window, document);

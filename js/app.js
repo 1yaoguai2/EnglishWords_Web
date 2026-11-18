@@ -320,6 +320,54 @@
     el.brandSub.textContent = MODE_LABEL[mode] + ' · ' + book.title;
   }
 
+  /* ---------------- 结算页键盘快捷键 ----------------
+     三个模式的结算页按钮统一带 data-keys（逗号分隔，小写），
+     戴上 <kbd> 角标；在这里集中拦截，完全不用鼠标。
+       Enter     → 第一个主按钮（若焦点已在结算按钮上则交给原生点击）
+       1/2/3    → 对应第 1/2/3 个按钮（各模式另有字母别名）
+       Escape   → 返回词库（下方全局处理）
+     -------------------------------------------------- */
+
+  function visibleResultButtons() {
+    const view = document.querySelector('.view:not([hidden])');
+    if (!view) return [];
+    const wrap = view.querySelector('#spellResult, #matchResult, #typeResult');
+    if (!wrap || wrap.hidden) return [];
+    return Array.prototype.slice.call(
+      wrap.querySelectorAll('.result-actions button[data-keys]:not(:disabled)')
+    );
+  }
+
+  function handleResultKeys(e) {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing || e.keyCode === 229) return;
+    const btns = visibleResultButtons();
+    if (!btns.length) return;
+
+    const key = (e.key || '').toLowerCase();
+    let hit = null;
+
+    if (e.key === 'Enter') {
+      // 焦点在结算按钮上时让浏览器原生激活该按钮，避免一次按键触发两个动作
+      const ae = document.activeElement;
+      if (ae && ae.tagName === 'BUTTON' && ae.closest('.result-actions')) return;
+      hit = btns.filter(function (b) { return b.classList.contains('primary'); })[0] || btns[0];
+    } else {
+      btns.forEach(function (b) {
+        const keys = b.dataset.keys.split(',').map(function (s) { return s.trim().toLowerCase(); });
+        if (keys.indexOf(key) >= 0) hit = b;
+      });
+    }
+    if (!hit) return;
+
+    // 捕获阶段拦截：既避免同一事件里「先出结算页、再被当成快捷键」的重复触发，
+    // 也防止按键继续冒泡到打字模式，把 r/s/1 等快捷键误当成字母输入
+    e.preventDefault();
+    e.stopPropagation();
+    hit.click();
+    hit.classList.add('key-hit');
+    setTimeout(function () { hit.classList.remove('key-hit'); }, 180);
+  }
+
   /* ---------------- 事件绑定 ---------------- */
 
   function bind() {
@@ -359,10 +407,14 @@
       openMode(book, btn.dataset.mode);
     });
 
+    // 捕获阶段：结算页是否存在以「按键发生的那一刻」为准
     document.addEventListener('keydown', function (e) {
-      if (e.key !== 'Escape') return;
-      if (state.mode) WA.goHome(false);
-    });
+      if (e.key === 'Escape') {
+        if (state.mode) WA.goHome(false);
+        return;
+      }
+      handleResultKeys(e);
+    }, true);
   }
 
   /* ---------------- 启动 ---------------- */
